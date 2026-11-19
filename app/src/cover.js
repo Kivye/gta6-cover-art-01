@@ -11,6 +11,8 @@ export const POSTER_SIZES = [
 const INK = '#050508';
 const PINK = '#FF2E88';
 const TEAL = '#00E5FF';
+/** Platform header height as a fraction of poster height (kept slim so the art breathes). */
+const PLATFORM_BAR_RATIO = 0.048;
 
 // The four grades. One LUT is shared by every panel of a poster: that single light is what
 // makes unrelated photos read as one printed cover.
@@ -28,7 +30,7 @@ export const GRADE_PRESETS = {
     // photograph reads as a painted panel beside the drawn scene panels.
     stops: [[0, '#150829'], [0.30, '#4A1D6B'], [0.55, '#C13B78'], [0.75, '#FF7E47'], [1, '#FFD98A']],
     blend: 0.50, saturation: 1.32, brightness: 1.03, curve: 0.30, posterize: 5,
-    halftone: { alpha: 0.12, shadow: 0.50 }, sun: 'sunset', edges: 0.6,
+    halftone: { alpha: 0.20, shadow: 0.62 }, sun: 'sunset', edges: 0.6,
   },
   neon: {
     label: 'Neon Night',
@@ -88,17 +90,22 @@ export function posterizeLevels(value, levels) {
  * originY are the panel's top-left in poster coordinates, unit is poster pixels per device
  * pixel, so the dot grid sits at poster scale whatever size we render at.
  */
-export function applyTritoneGrade(imageData, presetId, intensity, originX, originY, unit) {
+export function applyTritoneGrade(imageData, presetId, intensity, originX, originY, unit, light = false) {
   const preset = GRADE_PRESETS[presetId];
   const lut = lutFor(presetId);
-  const blend = Math.min(0.85, preset.blend * intensity);
+  // `light` is the touch for art that arrives already painted (the AI sample photos): a kiss
+  // of the shared tritone and a whisper of halftone for print unity, but no posterize steps
+  // and no ink-edge pass — the painting keeps its own shading.
+  const blend = Math.min(0.85, preset.blend * intensity * (light ? 0.30 : 1));
   const { data, width, height } = imageData;
-  const curve = preset.curve;
-  const sat = preset.saturation;
+  const curve = light ? preset.curve * 0.45 : preset.curve;
+  const sat = light ? 1 + (preset.saturation - 1) * 0.5 : preset.saturation;
   const bright = preset.brightness;
-  const levels = preset.posterize;
-  const dots = preset.halftone;
-  const lumArr = preset.edges ? new Float32Array(width * height) : null;
+  const levels = light ? 0 : preset.posterize;
+  const dots = light && preset.halftone
+    ? { alpha: preset.halftone.alpha * 0.45, shadow: preset.halftone.shadow }
+    : preset.halftone;
+  const lumArr = preset.edges && !light ? new Float32Array(width * height) : null;
   const cos = Math.cos(0.2618); // halftone screen at 15 degrees
   const sin = Math.sin(0.2618);
   for (let y = 0; y < height; y++) {
@@ -464,7 +471,7 @@ export function clipPanelPhoto(ctx, p, index, photo, state, W, H, scale) {
     const sy = Math.min(ih - sh, Math.max(0, fy * ih - sh / 2));
     tctx.drawImage(photo, sx, sy, sw, sh, 0, 0, dw, dh);
     const img = tctx.getImageData(0, 0, dw, dh);
-    applyTritoneGrade(img, state.presetId, state.intensity, bx, by, 1 / scale);
+    applyTritoneGrade(img, state.presetId, state.intensity, bx, by, 1 / scale, photo.__aiArt === true);
     tctx.putImageData(img, 0, 0);
     if (gradedPanelCache.size > 48) gradedPanelCache.clear();
     gradedPanelCache.set(key, tile);
@@ -476,8 +483,9 @@ export function clipPanelPhoto(ctx, p, index, photo, state, W, H, scale) {
   ctx.drawImage(tile, bx, by, bw, bh);
   if (state.dressing && (p.crop === 'hero' || index === 0)) {
     const preset = GRADE_PRESETS[state.presetId];
-    // The sun sits over the panel's top-left sky, never on the subject's face.
-    if (preset.sun) drawRetroSun(ctx, bx + bw * 0.15, by + bh * 0.21, bw * 0.115, preset.sun, u);
+    // The sun sits over the panel's top-left sky, never on the subject's face. Painted art
+    // brings its own sky, so the graphic sun only stamps real photographs.
+    if (preset.sun && !photo.__aiArt) drawRetroSun(ctx, bx + bw * 0.15, by + bh * 0.21, bw * 0.115, preset.sun, u);
   }
   ctx.restore();
   finishPanelFrame(ctx, p, index, quad, W, H, state);
@@ -526,10 +534,12 @@ export function finishPanelFrame(ctx, p, index, quad, W, H, state) {
 
 export const SCENE_PANELS = {
   heli: 'Helicopter',
+  moto: 'Motorcycle',
   car: 'Chase Car',
   yacht: 'Yacht',
   skyline: 'Neon Skyline',
   money: 'Money Flight',
+  partner: 'The Partner',
 };
 
 const SCENE_INK = '#0C0614';
@@ -547,6 +557,26 @@ function sceneSky(ctx, bx, by, bw, bh, stops) {
   ctx.fillRect(bx, by, bw, bh);
 }
 
+let dotPatternCache = null;
+
+/** A halftone dot screen (deterministic, built once) so drawn panels carry the same print
+ * texture the photo grade presses into photographs. */
+function dotPattern(ctx) {
+  if (dotPatternCache) return dotPatternCache;
+  try {
+    const tile = document.createElement('canvas');
+    tile.width = 9;
+    tile.height = 9;
+    const tctx = tile.getContext('2d');
+    tctx.fillStyle = 'rgba(5,2,12,0.16)';
+    tctx.beginPath();
+    tctx.arc(4.5, 4.5, 1.35, 0, Math.PI * 2);
+    tctx.fill();
+    dotPatternCache = ctx.createPattern(tile, 'repeat');
+  } catch { dotPatternCache = null; }
+  return dotPatternCache;
+}
+
 /** A print-depth shade pressed over every scene: light at the top, shadow at the foot. */
 function sceneShade(ctx, bx, by, bw, bh) {
   const g = ctx.createLinearGradient(0, by, 0, by + bh);
@@ -555,6 +585,13 @@ function sceneShade(ctx, bx, by, bw, bh) {
   g.addColorStop(1, 'rgba(0,0,0,0.25)');
   ctx.fillStyle = g;
   ctx.fillRect(bx, by, bw, bh);
+  const dots = dotPattern(ctx);
+  if (dots) {
+    ctx.save();
+    ctx.fillStyle = dots;
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.restore();
+  }
 }
 
 /** A wisp of smoke: two soft bezier strokes drifting off a point. */
@@ -723,8 +760,84 @@ function paintCarScene(ctx, bx, by, bw, bh, u) {
   ctx.closePath();
   ctx.fill();
   ctx.restore();
-  // The car body: one low wedge, nose to the left.
-  ctx.fillStyle = SCENE_INK;
+  // The police car, close behind in the far lane: smaller, higher, lit by its own light bar.
+  // Lifted and swollen a touch (a transform about its own centre) so its cabin, light bar
+  // and white door clear the muscle car's tail and the chase actually reads.
+  ctx.save();
+  ctx.translate(0, -bh * 0.058);
+  ctx.translate(X(0.82), Y(0.50));
+  ctx.scale(1.16, 1.16);
+  ctx.translate(-X(0.82), -Y(0.50));
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const copRed = ctx.createRadialGradient(X(0.755), Y(0.415), 2, X(0.755), Y(0.415), bw * 0.13);
+  copRed.addColorStop(0, 'rgba(255,42,66,0.85)');
+  copRed.addColorStop(1, 'rgba(255,42,66,0)');
+  ctx.fillStyle = copRed;
+  ctx.fillRect(bx, by, bw, bh);
+  const copBlue = ctx.createRadialGradient(X(0.865), Y(0.415), 2, X(0.865), Y(0.415), bw * 0.13);
+  copBlue.addColorStop(0, 'rgba(64,120,255,0.85)');
+  copBlue.addColorStop(1, 'rgba(64,120,255,0)');
+  ctx.fillStyle = copBlue;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.restore();
+  const copBody = ctx.createLinearGradient(0, Y(0.44), 0, Y(0.63));
+  copBody.addColorStop(0, '#33456E');
+  copBody.addColorStop(0.55, '#1C2742');
+  copBody.addColorStop(1, '#0D1424');
+  ctx.fillStyle = copBody;
+  ctx.beginPath();
+  ctx.moveTo(X(0.662), Y(0.598));
+  ctx.quadraticCurveTo(X(0.655), Y(0.520), X(0.715), Y(0.505));
+  ctx.lineTo(X(0.775), Y(0.498));
+  ctx.quadraticCurveTo(X(0.815), Y(0.448), X(0.878), Y(0.446));
+  ctx.quadraticCurveTo(X(0.928), Y(0.452), X(0.955), Y(0.500));
+  ctx.lineTo(X(0.985), Y(0.520));
+  ctx.quadraticCurveTo(X(0.998), Y(0.530), X(0.992), Y(0.585));
+  ctx.lineTo(X(0.985), Y(0.618));
+  ctx.lineTo(X(0.668), Y(0.618));
+  ctx.closePath();
+  ctx.fill();
+  // Cruiser glass and the white door panel.
+  ctx.fillStyle = 'rgba(165,215,235,0.75)';
+  ctx.beginPath();
+  ctx.moveTo(X(0.792), Y(0.492));
+  ctx.quadraticCurveTo(X(0.822), Y(0.458), X(0.872), Y(0.458));
+  ctx.quadraticCurveTo(X(0.912), Y(0.462), X(0.938), Y(0.494));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(238,242,248,0.88)';
+  ctx.beginPath();
+  ctx.roundRect(X(0.795), Y(0.520), bw * 0.105, bh * 0.082, 3 * u);
+  ctx.fill();
+  // Light bar: red left, blue right, both burning.
+  ctx.fillStyle = '#FF2A42';
+  ctx.fillRect(X(0.800), Y(0.436), bw * 0.038, bh * 0.020);
+  ctx.fillStyle = '#4078FF';
+  ctx.fillRect(X(0.842), Y(0.436), bw * 0.038, bh * 0.020);
+  // Cruiser wheels and headlight.
+  [[0.725], [0.935]].forEach(([fx]) => {
+    ctx.fillStyle = '#05050A';
+    ctx.beginPath();
+    ctx.arc(X(fx), Y(0.615), bh * 0.052, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#8A93A8';
+    ctx.beginPath();
+    ctx.arc(X(fx), Y(0.615), bh * 0.020, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.fillStyle = '#FFE9A8';
+  ctx.beginPath();
+  ctx.ellipse(X(0.664), Y(0.562), 4.2 * u, 2.6 * u, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // The car body: one low wedge, nose to the left, shaded in sunset tones (no longer a flat
+  // silhouette — a magenta-lit top, an ink belly, a hot band along the flank).
+  const bodyGrad = ctx.createLinearGradient(0, Y(0.36), 0, Y(0.72));
+  bodyGrad.addColorStop(0, '#54204A');
+  bodyGrad.addColorStop(0.45, '#2A1030');
+  bodyGrad.addColorStop(1, SCENE_INK);
+  ctx.fillStyle = bodyGrad;
   ctx.beginPath();
   ctx.moveTo(X(0.07), Y(0.70));
   ctx.quadraticCurveTo(X(0.058), Y(0.585), X(0.17), Y(0.555));
@@ -737,6 +850,26 @@ function paintCarScene(ctx, bx, by, bw, bh, u) {
   ctx.lineTo(X(0.075), Y(0.718));
   ctx.closePath();
   ctx.fill();
+  // Sunset rim along the roofline and a hot magenta band down the flank.
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,126,71,0.85)';
+  ctx.lineWidth = 2.2 * u;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(X(0.17), Y(0.555));
+  ctx.lineTo(X(0.315), Y(0.535));
+  ctx.quadraticCurveTo(X(0.40), Y(0.395), X(0.545), Y(0.375));
+  ctx.quadraticCurveTo(X(0.665), Y(0.375), X(0.735), Y(0.50));
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(232,73,122,0.27)';
+  ctx.beginPath();
+  ctx.moveTo(X(0.10), Y(0.615));
+  ctx.lineTo(X(0.93), Y(0.615));
+  ctx.lineTo(X(0.928), Y(0.665));
+  ctx.lineTo(X(0.095), Y(0.665));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
   // Cabin glass.
   ctx.fillStyle = 'rgba(140,220,240,0.72)';
   ctx.beginPath();
@@ -787,6 +920,17 @@ function paintCarScene(ctx, bx, by, bw, bh, u) {
   ctx.beginPath();
   ctx.ellipse(X(0.072), Y(0.618), 5.5 * u, 3.2 * u, 0, 0, Math.PI * 2);
   ctx.fill();
+  // Tire smoke boiling off both rear wheels, drifting back over the road.
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  [[0.815, 0.735, 0.16, 0.30], [0.885, 0.715, 0.11, 0.22], [0.955, 0.66, 0.075, 0.18]].forEach(([fx, fy, r, a]) => {
+    const puff = ctx.createRadialGradient(X(fx), Y(fy), 1, X(fx), Y(fy), bw * r);
+    puff.addColorStop(0, `rgba(205,205,220,${a})`);
+    puff.addColorStop(1, 'rgba(205,205,220,0)');
+    ctx.fillStyle = puff;
+    ctx.fillRect(bx, by, bw, bh);
+  });
+  ctx.restore();
   drawSmokeWisp(ctx, X(0.78), Y(0.15), bw * 0.15, u);
 }
 
@@ -916,6 +1060,20 @@ function paintSkylineScene(ctx, bx, by, bw, bh, u) {
   ctx.shadowColor = TEAL;
   ctx.fillRect(X(0.700), Y(0.42), bw * 0.016, bh * 0.17);
   ctx.restore();
+  // Police colour bleeding into the streets: red low at the left, blue at the right.
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const sirenR = ctx.createRadialGradient(X(0.16), Y(0.97), 2, X(0.16), Y(0.97), bw * 0.34);
+  sirenR.addColorStop(0, 'rgba(255,42,66,0.30)');
+  sirenR.addColorStop(1, 'rgba(255,42,66,0)');
+  ctx.fillStyle = sirenR;
+  ctx.fillRect(bx, by, bw, bh);
+  const sirenB = ctx.createRadialGradient(X(0.84), Y(0.97), 2, X(0.84), Y(0.97), bw * 0.34);
+  sirenB.addColorStop(0, 'rgba(64,120,255,0.30)');
+  sirenB.addColorStop(1, 'rgba(64,120,255,0)');
+  ctx.fillStyle = sirenB;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.restore();
   // Street glow along the foot.
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
@@ -1002,12 +1160,392 @@ function paintMoneyScene(ctx, bx, by, bw, bh, u) {
   drawSparkle(ctx, X(0.83), Y(0.82), 6 * u, PINK);
 }
 
+/** The motorcycle: a rider at speed on the coast road at dusk, dust and streaks behind. */
+function paintMotoScene(ctx, bx, by, bw, bh, u) {
+  const X = (f) => bx + f * bw;
+  const Y = (f) => by + f * bh;
+  sceneSky(ctx, bx, by, bw, bh, [[0, '#2A0A3A'], [0.5, '#7A1E5E'], [0.78, '#E8497A'], [1, '#FF9E4F']]);
+  drawRetroSun(ctx, X(0.86), Y(0.34), bw * 0.068, 'sunset', u);
+  // Sea glint on the horizon, then the coast road rising through the frame.
+  ctx.fillStyle = 'rgba(255,217,138,0.35)';
+  ctx.fillRect(bx, Y(0.545), bw, bh * 0.018);
+  ctx.fillStyle = '#150B22';
+  ctx.beginPath();
+  ctx.moveTo(bx, Y(0.66));
+  ctx.lineTo(bx + bw, Y(0.585));
+  ctx.lineTo(bx + bw, by + bh);
+  ctx.lineTo(bx, by + bh);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,217,138,0.45)';
+  for (let i = 0; i < 4; i++) ctx.fillRect(X(0.06 + i * 0.26), Y(0.845 - i * 0.018), bw * 0.11, bh * 0.02);
+  // Speed streaks streaming off the back of the bike.
+  ctx.strokeStyle = 'rgba(255,246,233,0.5)';
+  ctx.lineWidth = 2.6 * u;
+  ctx.lineCap = 'round';
+  [[0.46, 0.30], [0.55, 0.24], [0.64, 0.27], [0.72, 0.20]].forEach(([fy, len]) => {
+    ctx.beginPath();
+    ctx.moveTo(X(0.30), Y(fy));
+    ctx.lineTo(X(0.30 - len), Y(fy));
+    ctx.stroke();
+  });
+  // Dust kicked up behind the rear wheel.
+  ctx.save();
+  [[0.20, 0.82, 0.16, 0.20], [0.13, 0.76, 0.11, 0.15], [0.24, 0.70, 0.08, 0.12]].forEach(([fx, fy, r, a]) => {
+    const puff = ctx.createRadialGradient(X(fx), Y(fy), 1, X(fx), Y(fy), bw * r);
+    puff.addColorStop(0, `rgba(232,180,130,${a})`);
+    puff.addColorStop(1, 'rgba(232,180,130,0)');
+    ctx.fillStyle = puff;
+    ctx.fillRect(bx, by, bw, bh);
+  });
+  ctx.restore();
+  const wheel = (fx) => {
+    const cx = X(fx);
+    const cy = Y(0.815);
+    const r = bh * 0.115;
+    ctx.fillStyle = '#05050A';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6A6A7E';
+    ctx.lineWidth = 2 * u;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.60, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let s = 0; s < 4; s++) {
+      const a = (s / 4) * Math.PI + 0.3;
+      ctx.beginPath();
+      ctx.moveTo(cx - Math.cos(a) * r * 0.58, cy - Math.sin(a) * r * 0.58);
+      ctx.lineTo(cx + Math.cos(a) * r * 0.58, cy + Math.sin(a) * r * 0.58);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#C8C8D8';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  // Frame and bodywork: ink chassis, a sunset-gradient tank and tail. The whole machine is
+  // swollen about its centre so it fills its panel and reads at thumbnail size.
+  ctx.save();
+  ctx.translate(X(0.46), Y(0.62));
+  ctx.scale(1.22, 1.22);
+  ctx.translate(-X(0.46), -Y(0.62));
+  ctx.strokeStyle = SCENE_INK;
+  ctx.lineWidth = 5.5 * u;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(X(0.315), Y(0.815));
+  ctx.lineTo(X(0.44), Y(0.635));
+  ctx.lineTo(X(0.545), Y(0.60));
+  ctx.lineTo(X(0.615), Y(0.815));
+  ctx.moveTo(X(0.44), Y(0.635));
+  ctx.lineTo(X(0.47), Y(0.76));
+  ctx.moveTo(X(0.545), Y(0.60));
+  ctx.lineTo(X(0.50), Y(0.76));
+  ctx.lineTo(X(0.47), Y(0.76));
+  ctx.stroke();
+  const tankGrad = ctx.createLinearGradient(X(0.33), 0, X(0.58), 0);
+  tankGrad.addColorStop(0, '#C13B78');
+  tankGrad.addColorStop(1, '#FF7E47');
+  ctx.fillStyle = tankGrad;
+  ctx.beginPath();
+  ctx.moveTo(X(0.335), Y(0.615));
+  ctx.quadraticCurveTo(X(0.36), Y(0.545), X(0.44), Y(0.555));
+  ctx.lineTo(X(0.565), Y(0.575));
+  ctx.quadraticCurveTo(X(0.575), Y(0.625), X(0.52), Y(0.635));
+  ctx.lineTo(X(0.37), Y(0.645));
+  ctx.quadraticCurveTo(X(0.335), Y(0.64), X(0.335), Y(0.615));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = SCENE_INK;
+  ctx.beginPath();
+  ctx.ellipse(X(0.465), Y(0.735), bw * 0.052, bh * 0.075, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // A hot edge along the tank so the machine's line survives the rider sitting on it.
+  ctx.strokeStyle = 'rgba(255,190,110,0.95)';
+  ctx.lineWidth = 2.6 * u;
+  ctx.beginPath();
+  ctx.moveTo(X(0.36), Y(0.552));
+  ctx.quadraticCurveTo(X(0.44), Y(0.540), X(0.565), Y(0.572));
+  ctx.stroke();
+  wheel(0.315);
+  wheel(0.615);
+  // The rider, leaned into it: jacket, helmet, arms to the bars, boot on the peg.
+  ctx.strokeStyle = '#1B4A5A';
+  ctx.lineWidth = 8.5 * u;
+  ctx.beginPath();
+  ctx.moveTo(X(0.415), Y(0.545));
+  ctx.quadraticCurveTo(X(0.47), Y(0.44), X(0.545), Y(0.435));
+  ctx.stroke();
+  ctx.strokeStyle = SCENE_INK;
+  ctx.lineWidth = 7 * u;
+  ctx.beginPath();
+  ctx.moveTo(X(0.415), Y(0.545));
+  ctx.lineTo(X(0.475), Y(0.645));
+  ctx.lineTo(X(0.455), Y(0.745));
+  ctx.moveTo(X(0.50), Y(0.475));
+  ctx.lineTo(X(0.575), Y(0.565));
+  ctx.stroke();
+  ctx.fillStyle = '#175263';
+  ctx.beginPath();
+  ctx.ellipse(X(0.475), Y(0.475), bw * 0.044, bh * 0.090, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,126,71,0.9)';
+  ctx.lineWidth = 2.4 * u;
+  ctx.beginPath();
+  ctx.ellipse(X(0.475), Y(0.475), bw * 0.044, bh * 0.090, -0.5, Math.PI * 1.02, Math.PI * 1.62);
+  ctx.stroke();
+  ctx.fillStyle = '#E8E4DA';
+  ctx.beginPath();
+  ctx.arc(X(0.562), Y(0.408), bh * 0.068, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PINK;
+  ctx.beginPath();
+  ctx.arc(X(0.562), Y(0.408), bh * 0.068, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.lineTo(X(0.562), Y(0.408));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#12222C';
+  ctx.beginPath();
+  ctx.roundRect(X(0.562), Y(0.398), bw * 0.052, bh * 0.038, 3 * u);
+  ctx.fill();
+  // Headlight bloom at the front.
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const bloom = ctx.createRadialGradient(X(0.635), Y(0.60), 1, X(0.635), Y(0.60), bw * 0.07);
+  bloom.addColorStop(0, 'rgba(255,240,190,0.7)');
+  bloom.addColorStop(1, 'rgba(255,240,190,0)');
+  ctx.fillStyle = bloom;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.restore();
+  drawSmokeWisp(ctx, X(0.30), Y(0.70), bw * 0.10, u);
+  ctx.restore();
+}
+
+/** The partner: a bearded fixer in a beach shirt, money in both hands, bills in the air. */
+function paintPartnerScene(ctx, bx, by, bw, bh, u) {
+  const X = (f) => bx + f * bw;
+  const Y = (f) => by + f * bh;
+  sceneSky(ctx, bx, by, bw, bh, [[0, '#1B0530'], [0.6, '#4A1D6B'], [1, '#7A1E5E']]);
+  // Neon weather behind him, kept to the left and top so the studio badge corner stays his.
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const glowP = ctx.createRadialGradient(X(0.30), Y(0.26), 2, X(0.30), Y(0.26), bw * 0.52);
+  glowP.addColorStop(0, 'rgba(255,46,136,0.34)');
+  glowP.addColorStop(1, 'rgba(255,46,136,0)');
+  ctx.fillStyle = glowP;
+  ctx.fillRect(bx, by, bw, bh);
+  const glowT = ctx.createRadialGradient(X(0.62), Y(0.10), 2, X(0.62), Y(0.10), bw * 0.34);
+  glowT.addColorStop(0, 'rgba(0,229,255,0.26)');
+  glowT.addColorStop(1, 'rgba(0,229,255,0)');
+  ctx.fillStyle = glowT;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.restore();
+  const cx = X(0.37);
+  // Torso: dark jacket over an open patterned beach shirt, chest at the V.
+  ctx.fillStyle = '#14101E';
+  ctx.beginPath();
+  ctx.moveTo(X(0.03), Y(1.0));
+  ctx.quadraticCurveTo(X(0.05), Y(0.66), X(0.20), Y(0.575));
+  ctx.lineTo(X(0.54), Y(0.575));
+  ctx.quadraticCurveTo(X(0.69), Y(0.66), X(0.71), Y(1.0));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#0E7C86';
+  ctx.beginPath();
+  ctx.moveTo(X(0.245), Y(0.585));
+  ctx.lineTo(X(0.495), Y(0.585));
+  ctx.lineTo(X(0.44), Y(1.0));
+  ctx.lineTo(X(0.30), Y(1.0));
+  ctx.closePath();
+  ctx.fill();
+  // Beach-shirt pattern: little sunset flowers hashed across the cloth.
+  ctx.fillStyle = '#FF5DA2';
+  for (let i = 0; i < 9; i++) {
+    const px = X(0.27 + hash01(i * 3.1) * 0.20);
+    const py = Y(0.63 + hash01(i * 7.7) * 0.32);
+    ctx.beginPath();
+    ctx.arc(px, py, 2.6 * u, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#FFD319';
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    ctx.arc(X(0.28 + hash01(i * 5.3 + 9) * 0.18), Y(0.66 + hash01(i * 4.9 + 3) * 0.28), 1.8 * u, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Skin at the open collar.
+  ctx.fillStyle = '#B96F45';
+  ctx.beginPath();
+  ctx.moveTo(X(0.315), Y(0.575));
+  ctx.lineTo(X(0.425), Y(0.575));
+  ctx.lineTo(X(0.37), Y(0.70));
+  ctx.closePath();
+  ctx.fill();
+  // Jacket lapels and a magenta rim down his left edge.
+  ctx.fillStyle = '#0A0714';
+  ctx.beginPath();
+  ctx.moveTo(X(0.245), Y(0.585));
+  ctx.lineTo(X(0.315), Y(0.575));
+  ctx.lineTo(X(0.335), Y(0.78));
+  ctx.lineTo(X(0.27), Y(0.86));
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(X(0.495), Y(0.585));
+  ctx.lineTo(X(0.425), Y(0.575));
+  ctx.lineTo(X(0.405), Y(0.78));
+  ctx.lineTo(X(0.47), Y(0.86));
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = PINK;
+  ctx.lineWidth = 2.4 * u;
+  ctx.beginPath();
+  ctx.moveTo(X(0.055), Y(0.97));
+  ctx.quadraticCurveTo(X(0.075), Y(0.70), X(0.205), Y(0.60));
+  ctx.stroke();
+  // Head: skin blocks, dark hair, a full beard, and the smirk.
+  ctx.fillStyle = '#C97B5A';
+  ctx.beginPath();
+  ctx.ellipse(cx, Y(0.375), bw * 0.148, bh * 0.185, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(122,62,34,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(cx + bw * 0.062, Y(0.40), bw * 0.082, bh * 0.155, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#E5A173';
+  ctx.beginPath();
+  ctx.ellipse(cx - bw * 0.052, Y(0.315), bw * 0.052, bh * 0.075, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  // Hair: swept top and sides.
+  ctx.fillStyle = '#1D1216';
+  ctx.beginPath();
+  ctx.ellipse(cx, Y(0.235), bw * 0.152, bh * 0.085, 0, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(cx - bw * 0.152, Y(0.225), bw * 0.045, bh * 0.13);
+  ctx.fillRect(cx + bw * 0.107, Y(0.225), bw * 0.045, bh * 0.13);
+  // Beard: jaw mass with a lighter chin tuft.
+  ctx.beginPath();
+  ctx.ellipse(cx, Y(0.475), bw * 0.128, bh * 0.105, 0, 0, Math.PI);
+  ctx.fill();
+  ctx.fillRect(cx - bw * 0.128, Y(0.40), bw * 0.05, bh * 0.075);
+  ctx.fillRect(cx + bw * 0.078, Y(0.40), bw * 0.05, bh * 0.075);
+  ctx.fillStyle = '#33202A';
+  ctx.beginPath();
+  ctx.ellipse(cx, Y(0.50), bw * 0.07, bh * 0.05, 0, 0, Math.PI);
+  ctx.fill();
+  // Brows, eyes, nose shadow, and the sly mouth above the beard line.
+  ctx.strokeStyle = '#1D1216';
+  ctx.lineWidth = 3.4 * u;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - bw * 0.095, Y(0.335));
+  ctx.lineTo(cx - bw * 0.028, Y(0.322));
+  ctx.moveTo(cx + bw * 0.095, Y(0.328));
+  ctx.lineTo(cx + bw * 0.028, Y(0.322));
+  ctx.stroke();
+  ctx.fillStyle = '#16090A';
+  ctx.beginPath();
+  ctx.ellipse(cx - bw * 0.058, Y(0.365), bw * 0.020, bh * 0.011, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + bw * 0.058, Y(0.365), bw * 0.020, bh * 0.011, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(90,45,25,0.8)';
+  ctx.lineWidth = 2.2 * u;
+  ctx.beginPath();
+  ctx.moveTo(cx + bw * 0.008, Y(0.375));
+  ctx.lineTo(cx - bw * 0.006, Y(0.425));
+  ctx.stroke();
+  ctx.strokeStyle = '#2A0D12';
+  ctx.lineWidth = 3 * u;
+  ctx.beginPath();
+  ctx.moveTo(cx - bw * 0.052, Y(0.452));
+  ctx.quadraticCurveTo(cx + bw * 0.01, Y(0.472), cx + bw * 0.062, Y(0.438));
+  ctx.stroke();
+  // One hand fans bills at his chest; the other hauls a money bag at his side.
+  ctx.save();
+  ctx.translate(X(0.575), Y(0.66));
+  ctx.rotate(0.5);
+  for (let i = -1; i <= 1; i++) {
+    ctx.save();
+    ctx.rotate(i * 0.28);
+    ctx.fillStyle = '#2F8F4E';
+    ctx.beginPath();
+    ctx.roundRect(-bw * 0.016, -bh * 0.105, bw * 0.032, bh * 0.105, 2 * u);
+    ctx.fill();
+    ctx.strokeStyle = '#CDEACB';
+    ctx.lineWidth = 1.1 * u;
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+  ctx.fillStyle = '#B96F45';
+  ctx.beginPath();
+  ctx.ellipse(X(0.575), Y(0.675), bw * 0.030, bh * 0.026, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#77813C';
+  ctx.beginPath();
+  ctx.moveTo(X(0.115), Y(0.72));
+  ctx.quadraticCurveTo(X(0.055), Y(0.80), X(0.075), Y(0.92));
+  ctx.quadraticCurveTo(X(0.09), Y(1.0), X(0.14), Y(1.0));
+  ctx.lineTo(X(0.215), Y(1.0));
+  ctx.quadraticCurveTo(X(0.265), Y(0.88), X(0.215), Y(0.78));
+  ctx.quadraticCurveTo(X(0.185), Y(0.715), X(0.115), Y(0.72));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#59632C';
+  ctx.fillRect(X(0.128), Y(0.705), bw * 0.062, bh * 0.026);
+  ctx.strokeStyle = '#CDEACB';
+  ctx.lineWidth = 1.6 * u;
+  ctx.beginPath();
+  ctx.ellipse(X(0.165), Y(0.885), bw * 0.026, bh * 0.034, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#B96F45';
+  ctx.beginPath();
+  ctx.ellipse(X(0.135), Y(0.725), bw * 0.026, bh * 0.022, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // Bills in the air: near ones crisp, far ones ghosted twice for depth blur. The bottom-
+  // right stays clear — that corner belongs to the studio badge.
+  const bills = [
+    [0.13, 0.13, -0.5, 1.05, 0], [0.60, 0.16, 0.4, 0.9, 0], [0.86, 0.10, 0.85, 0.7, 1],
+    [0.06, 0.38, 0.25, 0.8, 0], [0.68, 0.36, -0.8, 0.62, 1], [0.90, 0.34, -0.3, 1.0, 0],
+    [0.30, 0.06, 0.7, 0.55, 1], [0.52, 0.30, 1.15, 0.5, 1],
+  ];
+  for (const [fx, fy, rot, s, far] of bills) {
+    const w = bw * 0.15 * s;
+    const h = w * 0.44;
+    for (let pass = far ? 2 : 0; pass >= 0; pass--) {
+      ctx.save();
+      ctx.translate(X(fx) + pass * 2.2 * u, Y(fy) + pass * 1.4 * u);
+      ctx.rotate(rot);
+      ctx.globalAlpha = pass === 0 ? 1 : 0.28;
+      ctx.fillStyle = '#2F8F4E';
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -h / 2, w, h, 3 * u);
+      ctx.fill();
+      if (pass === 0) {
+        ctx.strokeStyle = '#CDEACB';
+        ctx.lineWidth = 1.3 * u;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, 0, w * 0.15, h * 0.30, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+  drawSparkle(ctx, X(0.90), Y(0.55), 7 * u, '#FFFFFF');
+  drawSparkle(ctx, X(0.08), Y(0.55), 5.5 * u, PINK);
+}
+
 const SCENE_PAINTERS = {
   heli: paintHeliScene,
+  moto: paintMotoScene,
   car: paintCarScene,
   yacht: paintYachtScene,
   skyline: paintSkylineScene,
   money: paintMoneyScene,
+  partner: paintPartnerScene,
 };
 
 /**
@@ -1085,6 +1623,242 @@ export function drawSceneOverflow(ctx, layout, state, W, H) {
  * The ink title panel of CLASSIC NINE: a sunset gradient standing in for the wordmark tile,
  * with the sun, ink palms knocked out of the gradient, and the caption lettering on top.
  */
+/**
+ * The helicopter that lives in the hero panel's own sky (no panel of its own): a small,
+ * distant airframe in the open sky at the panel's upper left, sunset-graded and slightly
+ * hazed so it reads as far away on the horizon, its searchlight falling as a short, soft
+ * volumetric cone that dies in the sky — clear of the subject's hair and the palm trunks.
+ */
+export function drawHeroHeli(ctx, heroPanel, W, H) {
+  const quad = panelQuad(heroPanel, 0, W, H);
+  const xs = quad.map((q) => q[0]);
+  const ys = quad.map((q) => q[1]);
+  const bx = Math.min(...xs);
+  const by = Math.min(...ys);
+  const bw = Math.max(...xs) - bx;
+  const bh = Math.max(...ys) - by;
+  const u = Math.min(W, H) / 1080;
+  const hx = bx + bw * 0.04;
+  const hy = by + bh * 0.028;
+  const hw = bw * 0.30;
+  const hh = bh * 0.175;
+  const X = (f) => hx + f * hw;
+  const Y = (f) => hy + f * hh;
+  ctx.save();
+  traceQuad(ctx, quad);
+  ctx.clip();
+  // Warm sky-glow seating the airframe in the sunset.
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const seat = ctx.createRadialGradient(X(0.42), Y(0.45), 2, X(0.42), Y(0.45), hw * 0.55);
+  seat.addColorStop(0, 'rgba(255,158,79,0.20)');
+  seat.addColorStop(1, 'rgba(255,158,79,0)');
+  ctx.fillStyle = seat;
+  ctx.fillRect(bx, by, bw, bh);
+  // The volumetric cone: three nested sheers of light, widening as they fall, plus the pool.
+  const apexX = X(0.33);
+  const apexY = Y(0.92);
+  const baseY = by + bh * 0.315;
+  [[0.17, 0.10], [0.115, 0.16], [0.06, 0.24]].forEach(([spread, alpha]) => {
+    const g = ctx.createLinearGradient(0, apexY, 0, baseY);
+    g.addColorStop(0, `rgba(255,238,196,${alpha})`);
+    g.addColorStop(1, 'rgba(255,238,196,0.03)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(apexX - 3 * u, apexY);
+    ctx.lineTo(apexX + 3 * u, apexY);
+    ctx.lineTo(apexX + bw * spread, baseY);
+    ctx.lineTo(apexX - bw * (spread + 0.03), baseY);
+    ctx.closePath();
+    ctx.fill();
+  });
+  const pool = ctx.createRadialGradient(apexX - bw * 0.02, baseY, 2, apexX - bw * 0.02, baseY, bw * 0.12);
+  pool.addColorStop(0, 'rgba(255,240,190,0.26)');
+  pool.addColorStop(1, 'rgba(255,240,190,0)');
+  ctx.fillStyle = pool;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.restore();
+  // A breath of warm dust-shadow under the cone's path, so the beam reads against a bright
+  // sky as well as against the street.
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  const dust = ctx.createLinearGradient(0, apexY, 0, baseY);
+  dust.addColorStop(0, 'rgba(255,214,150,0.30)');
+  dust.addColorStop(1, 'rgba(255,214,150,0.5)');
+  ctx.fillStyle = dust;
+  ctx.beginPath();
+  ctx.moveTo(apexX - 2 * u, apexY);
+  ctx.lineTo(apexX + 2 * u, apexY);
+  ctx.lineTo(apexX + bw * 0.10, baseY);
+  ctx.lineTo(apexX - bw * 0.08, baseY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  // The airframe itself, hazed back a touch so distance reads before detail does.
+  ctx.save();
+  ctx.globalAlpha = 0.82;
+  // Tail boom and fin, warm-shaded.
+  const warm = ctx.createLinearGradient(0, Y(0.1), 0, Y(0.95));
+  warm.addColorStop(0, '#B45A28');
+  warm.addColorStop(0.5, '#6E2A1A');
+  warm.addColorStop(1, '#33100E');
+  ctx.fillStyle = warm;
+  ctx.beginPath();
+  ctx.moveTo(X(0.465), Y(0.315));
+  ctx.lineTo(X(0.845), Y(0.252));
+  ctx.lineTo(X(0.858), Y(0.298));
+  ctx.lineTo(X(0.478), Y(0.405));
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(X(0.845), Y(0.252));
+  ctx.lineTo(X(0.888), Y(0.168));
+  ctx.lineTo(X(0.902), Y(0.302));
+  ctx.lineTo(X(0.858), Y(0.298));
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20,6,8,0.85)';
+  ctx.lineWidth = 2.6 * u;
+  ctx.beginPath();
+  ctx.moveTo(X(0.880), Y(0.172));
+  ctx.lineTo(X(0.880), Y(0.298));
+  ctx.moveTo(X(0.852), Y(0.235));
+  ctx.lineTo(X(0.908), Y(0.235));
+  ctx.stroke();
+  // Rotor mast and blades.
+  ctx.fillStyle = '#2A0D10';
+  ctx.fillRect(X(0.343), Y(0.205), hw * 0.034, hh * 0.05);
+  ctx.save();
+  ctx.translate(X(0.36), Y(0.196));
+  ctx.rotate(-0.045);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, hw * 0.295, hh * 0.020, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 0.35;
+  ctx.translate(0, hh * 0.018);
+  ctx.rotate(0.028);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, hw * 0.28, hh * 0.016, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Body: sunset gradient, ink edge, pale cockpit glass, a hot rim along the crown.
+  ctx.beginPath();
+  ctx.ellipse(X(0.36), Y(0.365), hw * 0.155, hh * 0.150, 0, 0, Math.PI * 2);
+  ctx.fillStyle = warm;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20,6,8,0.9)';
+  ctx.lineWidth = 2.2 * u;
+  ctx.stroke();
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,190,110,0.9)';
+  ctx.lineWidth = 2.4 * u;
+  ctx.beginPath();
+  ctx.ellipse(X(0.36), Y(0.365), hw * 0.150, hh * 0.145, 0, Math.PI * 1.15, Math.PI * 1.75);
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(170,230,245,0.9)';
+  ctx.beginPath();
+  ctx.ellipse(X(0.268), Y(0.338), hw * 0.054, hh * 0.062, -0.15, 0, Math.PI * 2);
+  ctx.fill();
+  // Skids.
+  ctx.strokeStyle = '#2A0D10';
+  ctx.lineWidth = 3.4 * u;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(X(0.30), Y(0.495));
+  ctx.lineTo(X(0.272), Y(0.578));
+  ctx.moveTo(X(0.435), Y(0.495));
+  ctx.lineTo(X(0.468), Y(0.578));
+  ctx.moveTo(X(0.215), Y(0.588));
+  ctx.lineTo(X(0.525), Y(0.588));
+  ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
+let grainTileCache = null;
+let dotTileCache = null;
+
+/**
+ * The print finish over every panel: a deterministic film grain (a hashed noise tile laid
+ * down as an overlay) and a few fine vertical scratches, so the whole cover feels like a
+ * physical printed box rather than a clean screen render. Furniture stays crisp — this is
+ * called before the badges and header are drawn.
+ */
+export function drawPrintFinish(ctx, W, H) {
+  try {
+    if (!grainTileCache) {
+      const tile = document.createElement('canvas');
+      tile.width = 144;
+      tile.height = 144;
+      const tctx = tile.getContext('2d');
+      const img = tctx.createImageData(144, 144);
+      for (let y = 0; y < 144; y++) {
+        for (let x = 0; x < 144; x++) {
+          const v = 96 + Math.floor(hash01(x * 1.37 + y * 17.31) * 64);
+          const i = (y * 144 + x) * 4;
+          img.data[i] = v;
+          img.data[i + 1] = v;
+          img.data[i + 2] = v;
+          img.data[i + 3] = 255;
+        }
+      }
+      tctx.putImageData(img, 0, 0);
+      grainTileCache = tile;
+    }
+    const pat = ctx.createPattern(grainTileCache, 'repeat');
+    if (pat) {
+      ctx.save();
+      ctx.globalAlpha = 0.07;
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  } catch { /* grain is a finish, never a failure */ }
+  // One light halftone screen over the whole cover — photos, painted panels and drawn
+  // scenes alike — so every surface carries the same printed dot and reads as one sheet.
+  try {
+    if (!dotTileCache) {
+      const tile = document.createElement('canvas');
+      tile.width = 10;
+      tile.height = 10;
+      const tctx = tile.getContext('2d');
+      tctx.fillStyle = '#0A0316';
+      tctx.beginPath();
+      tctx.arc(5, 5, 2.3, 0, Math.PI * 2);
+      tctx.fill();
+      dotTileCache = tile;
+    }
+    const dots = ctx.createPattern(dotTileCache, 'repeat');
+    if (dots) {
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      if (dots.setTransform) dots.setTransform(new DOMMatrix().rotate(15));
+      ctx.fillStyle = dots;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  } catch { /* halftone is a finish, never a failure */ }
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 12; i++) {
+    const x = hash01(i * 13.7 + 5) * W;
+    const y0 = hash01(i * 3.9) * H * 0.35;
+    const len = H * (0.25 + hash01(i * 5.1) * 0.6);
+    const drift = (hash01(i * 9.3) - 0.5) * 7;
+    ctx.strokeStyle = i % 3 === 2
+      ? `rgba(10,5,15,${0.03 + hash01(i * 7.3) * 0.03})`
+      : `rgba(255,250,240,${0.02 + hash01(i * 7.3) * 0.045})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x + drift, y0 + len);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawTitlePanel(ctx, p, index, state, W, H) {
   const quad = panelQuad(p, index, W, H);
   const xs = quad.map((q) => q[0]);
@@ -1169,16 +1943,34 @@ export function drawTitleLettering(ctx, state, anchor) {
   ctx.restore();
   const script = state.caption.script.trim();
   if (script) {
-    const sSize = size * 0.46;
+    const sSize = size * (anchor.onPanel ? 0.46 : 0.40);
     ctx.save();
+    // On a hero panel the script starts where the last line's final two letters start,
+    // measured in the title font itself, so it sits below those letters ("sejajar di
+    // bawah huruf AT") and clear of the descriptor box in the corner (user revision, v5).
+    const lastLine = lines[lines.length - 1];
+    ctx.font = `${size}px "Archivo Black", Anton, sans-serif`;
+    const headW = ctx.measureText(lastLine).width - ctx.measureText(lastLine.slice(-2)).width;
     ctx.font = `${sSize}px Yellowtail, cursive`;
     const sw = ctx.measureText(script).width;
-    const sx = anchor.onPanel ? anchor.cx + anchor.maxWidth / 2 - sw * 0.92 : anchor.x + Math.min(anchor.maxWidth, widest()) - sw * 0.9;
-    const sy = baseY + sSize * 0.28;
+    const sx = anchor.onPanel ? anchor.cx + anchor.maxWidth / 2 - sw * 0.92 : anchor.x + headW + size * 0.05;
+    const sy = anchor.onPanel ? baseY + sSize * 0.28 : baseY + sSize * 0.80;
     ctx.translate(sx + sw / 2, sy);
-    ctx.rotate(-0.07);
+    ctx.rotate(anchor.onPanel ? -0.07 : -0.05);
     ctx.translate(-(sx + sw / 2), -sy);
     ctx.textAlign = 'left';
+    // The dark drop shadow pass (v5, second pass): the script is stamped once in
+    // near-black ink, knocked right-down beneath the neon tube, so the lettering
+    // lifts off the painted art instead of fighting it. Shadow first, glow second,
+    // bright core last — that order is what keeps the pink readable over the hero.
+    ctx.shadowColor = 'rgba(8,2,10,0.85)';
+    ctx.shadowBlur = 6 * u;
+    ctx.shadowOffsetX = 4 * u;
+    ctx.shadowOffsetY = 5 * u;
+    ctx.fillStyle = '#1A0512';
+    ctx.fillText(script, sx, sy);
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
     // Neon tube: a wide pink halo, a tighter burn, then the bright core.
     ctx.shadowColor = PINK;
     ctx.shadowBlur = 30 * u;
@@ -1204,7 +1996,7 @@ export function drawCreditsMicrotext(ctx, state, W, H) {
   ctx.font = `500 ${20 * u}px Oswald, sans-serif`;
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255,246,233,0.85)';
-  const top = state.platformBar ? H * 0.058 : 0;
+  const top = state.platformBar ? H * PLATFORM_BAR_RATIO : 0;
   ctx.fillText(credits, W - 26 * u, top + 44 * u);
   ctx.restore();
 }
@@ -1216,7 +2008,7 @@ export function drawCreditsMicrotext(ctx, state, W, H) {
  */
 export function drawPlatformBar(ctx, state, W, H) {
   const u = Math.min(W, H) / 1080;
-  const barH = H * 0.058;
+  const barH = H * PLATFORM_BAR_RATIO;
   ctx.save();
   const grad = ctx.createLinearGradient(0, 0, 0, barH);
   grad.addColorStop(0, '#0072CE');
@@ -1228,8 +2020,8 @@ export function drawPlatformBar(ctx, state, W, H) {
   ctx.fillStyle = '#FFFFFF';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  ctx.font = `${barH * 0.58}px "Archivo Black", sans-serif`;
-  ctx.fillText('PS5', 30 * u, barH * 0.54);
+  ctx.font = `${barH * 0.44}px "Archivo Black", sans-serif`;
+  ctx.fillText('NEXT-GEN CONSOLE', 30 * u, barH * 0.54);
   ctx.font = `600 ${barH * 0.30}px Archivo, sans-serif`;
   try { ctx.letterSpacing = `${barH * 0.10}px`; } catch { /* noop */ }
   ctx.textAlign = 'right';
@@ -1275,23 +2067,27 @@ export function drawCoverBadges(ctx, state, W, H) {
   ctx.font = `600 ${11 * u}px Oswald, sans-serif`;
   ctx.fillText('CONTENT RATED BY', bx + bw / 2, by + bh - 10.5 * u);
   ctx.restore();
-  // --- descriptor strip beside it ---
+  // --- descriptor strip beside it: a thin light-bordered box as tall as the rating card,
+  // its two lines centred in the full height so they read crisp instead of cramped. ---
   const lines = ['Intense Violence · Blood and Gore', 'Strong Language · Drug Reference'];
   ctx.save();
-  ctx.font = `500 ${15.5 * u}px Oswald, sans-serif`;
+  ctx.font = `500 ${17 * u}px Oswald, sans-serif`;
   const tw = Math.max(...lines.map((l) => ctx.measureText(l).width));
-  const sw = tw + 24 * u;
-  const sh = 58 * u;
+  const sw = tw + 28 * u;
+  const sh = bh;
   const sx = bx + bw + 12 * u;
-  const sy = H - m - sh;
-  ctx.fillStyle = 'rgba(5,5,10,0.72)';
+  const sy = by;
+  ctx.fillStyle = 'rgba(5,5,10,0.66)';
   ctx.beginPath();
   ctx.roundRect(sx, sy, sw, sh, 6 * u);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,246,233,0.92)';
+  ctx.strokeStyle = 'rgba(255,246,233,0.38)';
+  ctx.lineWidth = 1.5 * u;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,246,233,0.95)';
   ctx.textAlign = 'left';
-  ctx.fillText(lines[0], sx + 12 * u, sy + 24 * u);
-  ctx.fillText(lines[1], sx + 12 * u, sy + 46 * u);
+  ctx.fillText(lines[0], sx + 14 * u, sy + sh / 2 - 10 * u);
+  ctx.fillText(lines[1], sx + 14 * u, sy + sh / 2 + 18 * u);
   ctx.restore();
   // --- studio badge ---
   const swd = 148 * u;
@@ -1359,7 +2155,7 @@ export function renderPoster(canvas, state, photos, renderScale = 1) {
   ctx.fillRect(0, 0, W, H);
   const layout = buildPanelLayout(state.aspect, state.layoutId, photos.length);
   // With the platform header on, the whole panel grid is inset below the bar.
-  const inset = state.platformBar ? H * 0.058 : 0;
+  const inset = state.platformBar ? H * PLATFORM_BAR_RATIO : 0;
   ctx.save();
   if (inset) {
     ctx.translate(0, inset);
@@ -1380,6 +2176,15 @@ export function renderPoster(canvas, state, photos, renderScale = 1) {
     if (photo) clipPanelPhoto(ctx, p, i, photo, state, W, H, renderScale);
   });
   drawSceneOverflow(ctx, layout, state, W, H);
+  // In the HERO layout the helicopter lives in the hero photograph's own sky — unless the
+  // user has stamped a scene over that panel, in which case the panel is theirs.
+  if (state.layoutId === 'hero' && layout[0] && layout[0].kind !== 'title') {
+    const heroAdjust = state.adjusts[`${state.layoutId}:${state.aspect}:0`];
+    const heroScene = heroAdjust && heroAdjust.scene !== undefined ? heroAdjust.scene : layout[0].scene;
+    // No code-drawn helicopter over the hero panel: the current hero sample paints its
+    // own helicopter into the sky (user revision, preview v5), so drawHeroHeli is retired.
+    void heroScene;
+  }
   if (state.layoutId !== 'nine') {
     const hero = layout[0];
     drawTitleLettering(ctx, state, {
@@ -1400,6 +2205,7 @@ export function renderPoster(canvas, state, photos, renderScale = 1) {
   vig.addColorStop(1, 'rgba(5,2,12,0.35)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, W, H);
+  drawPrintFinish(ctx, W, H);
   if (state.ratingBadge) drawCoverBadges(ctx, state, W, H);
   if (state.platformBar) drawPlatformBar(ctx, state, W, H);
   drawBoxSheen(ctx, W, H);

@@ -98,6 +98,27 @@ async function addPhoto(url) {
   return img;
 }
 
+/** Sample photos by name: the kit's two photographs plus the painted AI sample set. */
+const SAMPLE_FILES = {
+  boulevard: 'boulevard.jpg',
+  pier: 'pier.jpg',
+  'ai-heroine': 'ai-heroine.webp',
+  'ai-moto': 'ai-moto.webp',
+  'ai-chase': 'ai-chase.webp',
+  'ai-partner': 'ai-partner.webp',
+  'ai-city': 'ai-city.webp',
+  'ai-hero2': 'ai-hero2.webp',
+  'ai-city2': 'ai-city2.webp',
+};
+
+async function addSample(name) {
+  const img = await addPhoto(`samples/${SAMPLE_FILES[name] ?? `${name}.jpg`}`);
+  // Painted art arrives already graded: the renderer gives it the light touch (no posterize,
+  // no ink edges) and skips the graphic sun, while real photographs get the full grade.
+  if (name.startsWith('ai-')) img.__aiArt = true;
+  return img;
+}
+
 async function addFiles(files) {
   for (const file of files) {
     if (file.type.startsWith('image/')) await addPhoto(URL.createObjectURL(file));
@@ -109,7 +130,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
   e.target.value = '';
 });
 document.querySelectorAll('[data-sample]').forEach((btn) => {
-  btn.addEventListener('click', () => addPhoto(`samples/${btn.dataset.sample}.jpg`));
+  btn.addEventListener('click', () => addSample(btn.dataset.sample));
 });
 
 const stage = document.getElementById('dropZone');
@@ -389,6 +410,7 @@ const shotApi = {
   state,
   captionFields,
   addPhoto,
+  addSample,
   render,
   openSheet,
   selectPanel(index) { state.selected = index; },
@@ -419,6 +441,24 @@ const shotApi = {
     if (sceneId) cur.scene = sceneId;
     else delete cur.scene;
     state.adjusts[key] = cur;
+  },
+  setPhoto(index, photoIdx) {
+    const view = viewState();
+    const key = adjustKey(index, view);
+    state.adjusts[key] = { ...(state.adjusts[key] ?? {}), photo: photoIdx };
+  },
+  setPhotoFor(layoutId, aspect, index, photoIdx) {
+    const key = `${layoutId}:${aspect}:${index}`;
+    state.adjusts[key] = { ...(state.adjusts[key] ?? {}), photo: photoIdx };
+  },
+  setCrop(index, crop) {
+    const view = viewState();
+    const key = adjustKey(index, view);
+    state.adjusts[key] = { ...(state.adjusts[key] ?? {}), ...crop };
+  },
+  setCropFor(layoutId, aspect, index, crop) {
+    const key = `${layoutId}:${aspect}:${index}`;
+    state.adjusts[key] = { ...(state.adjusts[key] ?? {}), ...crop };
   },
   setExportFlag(name, on) {
     state[name] = on;

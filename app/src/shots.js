@@ -4,7 +4,9 @@
 //   ?shot=sheet   the export sheet showing all three post sizes
 // Params: photos (comma list of sample names), layout, size, title, script, credits,
 // preset, drag (a panel index shown selected, mid-drag), scenes (comma list of
-// panelIndex:sceneId stamped into the current view), platform / rating (1 or 0 for the
+// panelIndex:sceneId stamped into the current view), assign (comma list of
+// panelIndex:photoIndex dealing a loaded photo into a panel), crop (comma list of
+// panelIndex:zoom:dx:dy adjust multipliers), platform / rating (1 or 0 for the
 // export furniture). window.__shotReady is set once the scene is painted, as the kit's
 // starter did.
 
@@ -12,7 +14,32 @@ async function setPhotos(api, names) {
   api.state.photos.length = 0;
   api.state.adjusts = {};
   api.state.selected = -1;
-  for (const name of names) await api.addPhoto(`samples/${name}.jpg`);
+  for (const name of names) {
+    if (api.addSample) await api.addSample(name);
+    else await api.addPhoto(`samples/${name}.jpg`);
+  }
+}
+
+function setAssign(api, params) {
+  const spec = params.get('assign');
+  if (!spec) return;
+  for (const pair of spec.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const [index, photo] = pair.split(':');
+    if (photo !== undefined && photo !== '') api.setPhoto(Number(index), Number(photo));
+  }
+}
+
+function setCrops(api, params) {
+  const spec = params.get('crop');
+  if (!spec) return;
+  for (const part of spec.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const [index, zoom, dx, dy] = part.split(':');
+    const crop = {};
+    if (zoom !== undefined && zoom !== '') crop.zoom = Number(zoom);
+    if (dx !== undefined && dx !== '') crop.dx = Number(dx);
+    if (dy !== undefined && dy !== '') crop.dy = Number(dy);
+    api.setCrop(Number(index), crop);
+  }
 }
 
 function setCaption(api, params) {
@@ -45,23 +72,42 @@ export async function runShot(shot, params, api) {
   setCaption(api, params);
   await setPhotos(api, photos);
   setScenes(api, params);
+  setAssign(api, params);
+  setCrops(api, params);
 
   if (shot === 'cover') {
     document.body.classList.add('shot-cover');
   } else if (shot === 'sheet') {
     document.body.classList.add('shot-sheet');
-    // The sheet renders all three aspects from this one state, so the scene stamps are
-    // dealt per aspect: the same cover story at every post size.
-    api.setSceneFor('hero', 'landscape', 1, 'heli');
-    api.setSceneFor('hero', 'landscape', 2, 'car');
-    api.setSceneFor('hero', 'landscape', 3, 'skyline');
-    api.setSceneFor('hero', 'landscape', 4, 'money');
-    api.setSceneFor('hero', 'square', 1, 'heli');
-    api.setSceneFor('hero', 'square', 2, 'car');
-    api.setSceneFor('hero', 'square', 3, 'skyline');
-    api.setSceneFor('hero', 'portrait', 1, 'car');
-    api.setSceneFor('hero', 'portrait', 2, 'skyline');
-    api.setSceneFor('hero', 'portrait', 3, 'money');
+    // The sheet renders all three aspects from this one state, so the deal is stamped per
+    // aspect: the same cover story at every post size. Landscape hero: the moto and chase
+    // paintings ride the right column, the neon city painting takes the bottom-left slot,
+    // and the partner painting takes the bottom-right. The hero crop zooms in and deals
+    // from the left edge, so the heroine's face stands clear of the title block. Square
+    // and portrait hero have a three-panel bottom row instead: moto, chase, partner.
+    api.setPhotoFor('hero', 'landscape', 1, 1);
+    api.setPhotoFor('hero', 'landscape', 2, 2);
+    api.setPhotoFor('hero', 'landscape', 3, 4);
+    api.setPhotoFor('hero', 'landscape', 4, 3);
+    api.setCropFor('hero', 'landscape', 0, { zoom: 1.08, dx: 0, dy: 0.06 });
+    api.setCropFor('hero', 'landscape', 1, { zoom: 0.4545, dy: 0.18 });
+    api.setCropFor('hero', 'landscape', 2, { zoom: 0.5, dy: -0.222 });
+    api.setCropFor('hero', 'landscape', 3, { zoom: 1.141, dx: 0.25, dy: 0.238 });
+    api.setCropFor('hero', 'landscape', 4, { zoom: 1.141, dx: -0.155, dy: -0.338 });
+    api.setCropFor('hero', 'square', 0, { zoom: 1.0, dx: 0, dy: 0.05 });
+    api.setCropFor('hero', 'portrait', 0, { zoom: 1.0, dx: 0, dy: 0.05 });
+    api.setPhotoFor('hero', 'square', 1, 1);
+    api.setPhotoFor('hero', 'square', 2, 2);
+    api.setPhotoFor('hero', 'square', 3, 3);
+    api.setCropFor('hero', 'square', 1, { zoom: 0.4545 });
+    api.setCropFor('hero', 'square', 2, { zoom: 0.5 });
+    api.setCropFor('hero', 'square', 3, { zoom: 1.141, dy: -0.443 });
+    api.setPhotoFor('hero', 'portrait', 1, 1);
+    api.setPhotoFor('hero', 'portrait', 2, 2);
+    api.setPhotoFor('hero', 'portrait', 3, 3);
+    api.setCropFor('hero', 'portrait', 1, { zoom: 0.4545, dx: 0.06 });
+    api.setCropFor('hero', 'portrait', 2, { zoom: 0.5, dx: 0.1 });
+    api.setCropFor('hero', 'portrait', 3, { zoom: 1.141, dy: -0.354 });
     api.openSheet();
   } else if (shot === 'editor') {
     const drag = params.get('drag');

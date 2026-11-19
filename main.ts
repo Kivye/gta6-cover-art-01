@@ -49,4 +49,4 @@ writeFileSync(
 const appFiles = readdirSync(join(out, 'app'), { recursive: true }).length;
 const shotFiles = readdirSync(join(out, 'screenshots')).length;
 const dossierBytes = statSync(join(out, 'dossier.json')).size;
-console.log(`viceframe: handed in ${appFiles} app files, ${shotFiles} screenshots, dossier ${dossierBytes} bytes`);
+console.log(`viceframe hand-in complete: ${appFiles} app files and ${shotFiles} screenshots; dossier is ${dossierBytes} bytes`);
