@@ -211,7 +211,6 @@ function buildFurniture() {
     ['rating', 'Rating block + descriptors'],
     ['badge', 'Studio badge'],
     ['sheen', 'Box sheen sweep'],
-    ['nose', 'Car nose breaking the frame'],
   ];
   for (const [key, label] of items) {
     const row = document.createElement('label');

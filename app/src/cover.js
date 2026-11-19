@@ -4,8 +4,8 @@
 // this module: the panel geometry for the three layouts, the colour grades
 // that unify a set of photos into one illustrated poster, the backdrop
 // dressing (retro sun, palms, skyline, halftone), the caption lettering and
-// the box furniture (platform header, rating block, studio badge, sheen and
-// the car nose that breaks a panel's frame). The module is pure canvas: it
+// the box furniture (platform header, rating block, studio badge, sheen).
+// The module is pure canvas: it
 // takes a 2d context, a pixel size, a scene description and the loaded
 // images, and paints. The editor in main.js owns the scene and the DOM.
 //
@@ -19,7 +19,7 @@
 //     crops:   { panelIndex: { z, dx, dy } },
 //     title:   'VICE\nHEAT',
 //     script:  'after dark',
-//     furniture: { header, rating, badge, sheen, nose }  // booleans
+//     furniture: { header, rating, badge, sheen }  // booleans
 //   }
 
 export const COVER_SIZES = {
@@ -68,7 +68,7 @@ export function defaultScene() {
     crops: {},
     title: 'VICE\nHEAT',
     script: 'after dark',
-    furniture: { header: true, rating: true, badge: true, sheen: true, nose: true },
+    furniture: { header: true, rating: true, badge: true, sheen: true },
   };
 }
 
@@ -531,7 +531,7 @@ export function drawPanels(ctx, scene, W, H, images) {
 
 export function titleMetrics(scene, W, H) {
   const size = scene.layout === 'hero' && W < H ? W * 0.19 : H * 0.20;
-  const x = W * 0.098;
+  const x = W * 0.098 + W * (18 / 1280);
   const lastBaseline = H * 0.90;
   return { size, x, lastBaseline, lineGap: size * 0.99 };
 }
@@ -655,10 +655,11 @@ function drawRatingBlock(ctx, W, H) {
   ctx.font = `${boxH * 0.082}px "Oswald", sans-serif`;
   ctx.fillText('CONTENT RATED BY', x + boxW / 2, y + boxH * 0.90);
   ctx.fillText('VF', x + boxW / 2, y + boxH * 0.985);
-  // The descriptor card beside it: translucent black, thin rule, two lines.
-  const dx = x + boxW + W * 0.006;
-  const dw = W * 0.136;
-  const dh = boxH * 0.72;
+  // The descriptor strip beside it: a slim translucent band bottom-aligned
+  // with the M box, two tight lines that stay clear of the title above.
+  const dx = x + boxW + W * 0.004;
+  const dw = W * 0.130;
+  const dh = H * 0.042;
   const dy = y + boxH - dh;
   ctx.fillStyle = 'rgba(8,6,14,0.78)';
   ctx.fillRect(dx, dy, dw, dh);
@@ -667,9 +668,9 @@ function drawRatingBlock(ctx, W, H) {
   ctx.strokeRect(dx, dy, dw, dh);
   ctx.fillStyle = '#f2eee6';
   ctx.textAlign = 'left';
-  ctx.font = `${dh * 0.175}px "Oswald", sans-serif`;
-  ctx.fillText('Intense Violence · Blood and Gore', dx + dw * 0.06, dy + dh * 0.36);
-  ctx.fillText('Strong Language · Drug Reference', dx + dw * 0.06, dy + dh * 0.68);
+  ctx.font = `${dh * 0.34}px "Oswald", sans-serif`;
+  ctx.fillText('Intense Violence · Blood and Gore', dx + dw * 0.045, dy + dh * 0.40);
+  ctx.fillText('Strong Language · Drug Reference', dx + dw * 0.045, dy + dh * 0.79);
   ctx.textAlign = 'left';
 }
 
@@ -722,92 +723,12 @@ function drawSheen(ctx, W, H) {
   ctx.restore();
 }
 
-function drawCarNose(ctx, W, H, anchor) {
-  // A glossy red convertible nose poking past the chase panel's lower-left
-  // corner — the one piece of the collage allowed to break its frame. Drawn
-  // as a side profile: windshield wedge at the rear, a long hood falling to
-  // the nose tip, a ringed headlight, a chrome bumper and the top of the
-  // front wheel, so it reads as a car at a glance rather than a red streak.
-  const w = W * 0.128;
-  const h = w * 0.46;
-  ctx.save();
-  ctx.translate(anchor.x, anchor.y);
-  ctx.rotate(-0.07);
-  ctx.shadowColor = 'rgba(0,0,0,0.55)';
-  ctx.shadowBlur = h * 0.28;
-  ctx.shadowOffsetY = h * 0.10;
-  const body = ctx.createLinearGradient(0, 0, 0, h);
-  body.addColorStop(0, '#f0445e');
-  body.addColorStop(0.45, '#c21532');
-  body.addColorStop(1, '#700b1f');
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.moveTo(0, h * 0.92);
-  ctx.lineTo(w * 0.015, h * 0.52);
-  ctx.quadraticCurveTo(w * 0.03, h * 0.30, w * 0.17, h * 0.26); // rear deck
-  ctx.quadraticCurveTo(w * 0.30, h * 0.02, w * 0.44, h * 0.05); // windshield rise
-  ctx.quadraticCurveTo(w * 0.52, h * 0.07, w * 0.58, h * 0.24); // cowl
-  ctx.quadraticCurveTo(w * 0.82, h * 0.30, w * 0.965, h * 0.50); // hood to tip
-  ctx.quadraticCurveTo(w * 1.005, h * 0.56, w * 0.99, h * 0.72); // nose face
-  ctx.lineTo(w * 0.965, h * 0.90);
-  ctx.quadraticCurveTo(w * 0.60, h * 1.0, w * 0.30, h * 0.97);
-  ctx.quadraticCurveTo(w * 0.10, h * 0.95, 0, h * 0.92);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  // Windshield glass over the rise.
-  ctx.fillStyle = 'rgba(16,14,34,0.92)';
-  ctx.beginPath();
-  ctx.moveTo(w * 0.235, h * 0.235);
-  ctx.quadraticCurveTo(w * 0.315, h * 0.045, w * 0.435, h * 0.065);
-  ctx.quadraticCurveTo(w * 0.475, h * 0.075, w * 0.50, h * 0.225);
-  ctx.quadraticCurveTo(w * 0.36, h * 0.19, w * 0.235, h * 0.235);
-  ctx.closePath();
-  ctx.fill();
-  // Hood highlight streak.
-  ctx.strokeStyle = 'rgba(255,190,190,0.5)';
-  ctx.lineWidth = h * 0.045;
-  ctx.beginPath();
-  ctx.moveTo(w * 0.56, h * 0.33);
-  ctx.quadraticCurveTo(w * 0.78, h * 0.37, w * 0.94, h * 0.52);
-  ctx.stroke();
-  // Headlight: chrome ring, pale lens, bright core.
-  ctx.beginPath();
-  ctx.ellipse(w * 0.905, h * 0.60, w * 0.052, h * 0.115, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#d9d4c8';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(w * 0.905, h * 0.60, w * 0.040, h * 0.088, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffe9a8';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(w * 0.905, h * 0.60, w * 0.016, h * 0.036, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#fffbe8';
-  ctx.fill();
-  // Front wheel crown and a chrome bumper line.
-  ctx.beginPath();
-  ctx.arc(w * 0.76, h * 0.99, w * 0.085, Math.PI, Math.PI * 2);
-  ctx.fillStyle = '#0c0a12';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(w * 0.76, h * 0.99, w * 0.038, Math.PI, Math.PI * 2);
-  ctx.fillStyle = '#cfd4da';
-  ctx.fill();
-  ctx.fillStyle = 'rgba(240,244,248,0.9)';
-  ctx.fillRect(w * 0.30, h * 0.86, w * 0.66, h * 0.055);
-  ctx.restore();
-}
-
 // ---------------------------------------------------------------- the draw
 
 export function drawCover(ctx, W, H, scene, images) {
   drawBackdrop(ctx, W, H);
   const quads = drawPanels(ctx, scene, W, H, images);
   if (scene.furniture.sheen) drawSheen(ctx, W, H);
-  if (scene.furniture.nose && scene.layout === 'hero' && quads[2]) {
-    const b = quadBounds(quads[2]);
-    drawCarNose(ctx, W, H, { x: b.x - W * 0.012, y: b.y + b.h - H * 0.068 });
-  }
   if (scene.furniture.header) drawHeaderBar(ctx, W, H);
   const titleBox = drawTitle(ctx, scene, W, H);
   drawScript(ctx, scene, W, H, titleBox);
