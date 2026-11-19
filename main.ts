@@ -1,3 +1,8 @@
+// VICEFRAME — a GTA 6-style cover art maker (multi-panel tilted grids, one shared Vice Sunset
+// tritone grade, stacked Anton lettering with a neon script accent, PNG export in the three
+// post sizes). The handoff program below is the kit's plumbing, kept as handed out except for
+// this header and the run summary it prints at the end.
+//
 // A working gta6-cover-art-01 entry (Node 22, standard library only): the app is this directory's app/ folder, plain
 // static files a desktop browser loads offline (app/index.html and its ES modules, no library and no network
 // request), and the program hands it in. It copies app/ and screenshots/ from beside this file to /output and writes
@@ -11,7 +16,7 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
@@ -38,3 +43,10 @@ writeFileSync(
     app_path_max_bytes: 1000,
   }),
 );
+
+// Run summary (VICEFRAME): what was handed in, so a local run shows the entry's shape at a
+// glance — the app file count, the screenshot count and the dossier's size in bytes.
+const appFiles = readdirSync(join(out, 'app'), { recursive: true }).length;
+const shotFiles = readdirSync(join(out, 'screenshots')).length;
+const dossierBytes = statSync(join(out, 'dossier.json')).size;
+console.log(`viceframe: handed in ${appFiles} app files, ${shotFiles} screenshots, dossier ${dossierBytes} bytes`);
