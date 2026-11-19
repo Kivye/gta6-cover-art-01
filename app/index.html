@@ -1,139 +1,80 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VICEFRAME — GTA-style cover art maker</title>
-<link rel="stylesheet" href="./style.css">
+<title>VICEFRAME — GTA-style cover maker</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <span class="wordmark">VICEFRAME</span>
-    <span class="tagline">Your photo. Nine panels. One sunset.</span>
-  </div>
-  <div id="presetBar" class="preset-bar" role="group" aria-label="Colour grade"></div>
-  <button id="exportTop" class="btn btn-primary" type="button">Export PNG</button>
-</header>
+<div id="app">
+  <aside id="rail">
+    <header class="brand">
+      <h1>VICEFRAME</h1>
+      <p>Turn your photos into GTA-style box art. Pick a layout, drop photos
+      into the panels, set the caption, export a poster PNG.</p>
+    </header>
 
-<main class="layout">
-  <section id="dropZone" class="stage" aria-label="Cover preview">
-    <canvas id="coverCanvas" width="1080" height="1080"></canvas>
-    <p class="drop-hint">Drop photos anywhere — the cover rebuilds itself</p>
-  </section>
-
-  <aside class="rail">
-    <section id="photoRail" class="rail-box">
+    <section>
       <h2>Photos</h2>
-      <div id="photoThumbs" class="thumbs"></div>
-      <div class="row">
-        <label class="btn btn-ghost" for="fileInput">+ Add photos</label>
-        <button class="btn btn-ghost" type="button" data-sample="pier">Try the pier</button>
-        <button class="btn btn-ghost" type="button" data-sample="boulevard">Try the boulevard</button>
-      </div>
-      <div class="row">
-        <button class="btn btn-ghost" type="button" data-sample="ai-heroine">AI heroine</button>
-        <button class="btn btn-ghost" type="button" data-sample="ai-moto">AI moto</button>
-        <button class="btn btn-ghost" type="button" data-sample="ai-chase">AI chase</button>
-        <button class="btn btn-ghost" type="button" data-sample="ai-partner">AI partner</button>
-        <button class="btn btn-ghost" type="button" data-sample="ai-city">AI city</button>
-      </div>
-      <input id="fileInput" type="file" accept="image/*" multiple hidden>
+      <div id="photoTray" class="tray"></div>
+      <button id="uploadBtn" class="wide">Upload your own photo</button>
+      <p class="hint">…or drag image files anywhere onto this window. Photos
+      never leave your machine. Click a photo to drop it into the selected panel.</p>
     </section>
 
-    <section id="layoutBar" class="rail-box">
+    <section>
+      <h2>Panels</h2>
+      <div id="panelList"></div>
+      <p class="hint">Drag a panel on the cover to reposition its photo;
+      scroll over a panel to zoom it.</p>
+    </section>
+
+    <section>
       <h2>Layout</h2>
-      <div class="seg" role="group" aria-label="Layout">
-        <button type="button" data-layout="auto" class="on">Auto</button>
-        <button type="button" data-layout="hero">Hero</button>
-        <button type="button" data-layout="duo">Duo</button>
-        <button type="button" data-layout="nine">Nine</button>
-      </div>
-      <p class="hint">Drag inside a panel to move its photo, scroll to zoom it. Click a panel to select it.</p>
-      <div class="row">
-        <button id="swapPhoto" class="btn btn-ghost" type="button">Swap panel photo</button>
-        <button id="resetPanel" class="btn btn-ghost" type="button">Reset panel</button>
-        <button id="shuffleLayout" class="btn btn-ghost" type="button">Shuffle crops</button>
-      </div>
+      <div id="layoutBtns" class="choices"></div>
+      <h2>Post size</h2>
+      <div id="sizeBtns" class="choices"></div>
     </section>
 
-    <section class="rail-box">
-      <h2>Scene panels</h2>
-      <p class="hint">Click a panel on the cover to select it, then stamp an illustrated scene into it — drawn in code, lit by the same sunset. One photo plus story panels beats five crops of one photo.</p>
-      <div class="row">
-        <button class="btn btn-ghost" type="button" data-scene="heli">Helicopter</button>
-        <button class="btn btn-ghost" type="button" data-scene="moto">Motorcycle</button>
-        <button class="btn btn-ghost" type="button" data-scene="car">Chase car</button>
-        <button class="btn btn-ghost" type="button" data-scene="yacht">Yacht</button>
-        <button class="btn btn-ghost" type="button" data-scene="skyline">Neon skyline</button>
-        <button class="btn btn-ghost" type="button" data-scene="money">Money flight</button>
-        <button class="btn btn-ghost" type="button" data-scene="partner">The Partner</button>
-        <button class="btn btn-ghost" type="button" id="clearScene">Back to photo</button>
-      </div>
+    <section>
+      <h2>Colour grade</h2>
+      <div id="gradeBtns" class="choices"></div>
     </section>
 
-    <form id="captionForm" class="rail-box">
+    <section>
       <h2>Caption</h2>
-      <label>Title lines
-        <textarea id="capTitle" rows="2" maxlength="42">VICE
-HEAT</textarea>
+      <label class="field">Title (one line per row)
+        <textarea id="titleInput" rows="2" spellcheck="false"></textarea>
       </label>
-      <label>Script word
-        <input id="capScript" type="text" maxlength="24" value="after dark">
+      <label class="field">Script accent
+        <input id="scriptInput" type="text" spellcheck="false">
       </label>
-      <label>Credits
-        <input id="capCredits" type="text" maxlength="48" value="">
-      </label>
-    </form>
-
-    <section class="rail-box">
-      <h2>Grade</h2>
-      <label class="slider-label">Intensity <input id="intensity" type="range" min="30" max="130" value="100"></label>
-      <label class="check"><input id="neonFrame" type="checkbox" checked> Neon frame</label>
-      <label class="check"><input id="dressing" type="checkbox" checked> Vice dressing (sun, palms, skyline)</label>
     </section>
 
-    <section id="exportBar" class="rail-box">
+    <section>
+      <h2>Box furniture</h2>
+      <div id="furnitureToggles"></div>
+    </section>
+
+    <section>
       <h2>Export</h2>
-      <div class="seg" role="group" aria-label="Post size">
-        <button type="button" data-size="square" class="on">1080 × 1080</button>
-        <button type="button" data-size="portrait">1080 × 1350</button>
-        <button type="button" data-size="landscape">1920 × 1080</button>
+      <div class="exportGrid">
+        <button id="exportSquare">PNG · Square</button>
+        <button id="exportPortrait">PNG · Portrait</button>
+        <button id="exportLandscape">PNG · Landscape</button>
       </div>
-      <label class="check"><input id="platformBar" type="checkbox" checked> Platform header bar</label>
-      <label class="check"><input id="ratingBadge" type="checkbox" checked> Rating badge + studio mark</label>
-      <button id="exportPng" class="btn btn-primary btn-big" type="button">EXPORT PNG</button>
-      <button id="openSheet" class="btn btn-ghost btn-wide" type="button">Export sheet — all three sizes</button>
-      <p id="status" class="hint" role="status"></p>
+      <button id="sheetBtn" class="wide">Export sheet — all three sizes</button>
+      <button id="exportSheetPng" class="wide ghost">Download the sheet as PNG</button>
     </section>
   </aside>
-</main>
 
-<section id="exportSheet" class="sheet" hidden>
-  <div class="sheet-head">
-    <h2>Export sheet</h2>
-    <p>One cover, every post size. Each one is a single click from photo to PNG.</p>
-    <button id="closeSheet" class="btn btn-ghost" type="button">Back to editor</button>
-  </div>
-  <div class="sheet-grid">
-    <figure class="sheet-item">
-      <canvas id="sheetSquare" width="540" height="540"></canvas>
-      <figcaption>Square post — 1080 × 1080 PNG</figcaption>
-      <button class="btn btn-primary" type="button" data-download="square">Download 1080 × 1080</button>
-    </figure>
-    <figure class="sheet-item">
-      <canvas id="sheetPortrait" width="432" height="540"></canvas>
-      <figcaption>Portrait post — 1080 × 1350 PNG</figcaption>
-      <button class="btn btn-primary" type="button" data-download="portrait">Download 1080 × 1350</button>
-    </figure>
-    <figure class="sheet-item sheet-wide">
-      <canvas id="sheetLandscape" width="880" height="495"></canvas>
-      <figcaption>Landscape post — 1920 × 1080 PNG</figcaption>
-      <button class="btn btn-primary" type="button" data-download="landscape">Download 1920 × 1080</button>
-    </figure>
-  </div>
-</section>
-
+  <main id="stageWrap">
+    <canvas id="stage" width="1920" height="1080"></canvas>
+    <canvas id="sheet" width="1800" height="1200" hidden></canvas>
+  </main>
+</div>
+<input id="fileInput" type="file" accept="image/*" multiple hidden>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
