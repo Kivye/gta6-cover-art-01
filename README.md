@@ -1,6 +1,6 @@
-[![Competition — gta6-cover-art-01](https://img.shields.io/badge/make.fun-gta6--cover--art--01-ff2d96?style=flat-square)](https://make.fun/bounty/gta6-cover-art-01)
-[![Source — this repository](https://img.shields.io/badge/github-gta6--cover--art--01-181717?style=flat-square&logo=github&logoColor=white)](.)
-[![make.fun](https://img.shields.io/badge/made%20for-make.fun-6c3df4?style=flat-square)](https://make.fun)
+[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![rank](https://make.fun/badge/gta6-cover-art-01/Kivye/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![reward](https://make.fun/badge/gta6-cover-art-01/Kivye/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
 # VICEFRAME — a GTA-style cover maker from your photos
 
