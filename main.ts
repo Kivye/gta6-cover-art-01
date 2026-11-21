@@ -1,28 +1,21 @@
-// VICEFRAME hand-in.
-//
-// Copies the app and its screenshots into the output directory and writes
-// the dossier the judge reads, using the kit's vendored buildDossier so the
-// bytes match the gate's own rebuild exactly. Outside the grader,
-// MAKEFUN_OUTPUT_DIR stands in for /output:
-//
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// VICEFRAME hand-in program.
+// Copies app/ and screenshots/ into the output directory, then writes the
+// dossier with the kit's own library so the grader's rebuild matches byte
+// for byte. Standard library only; the output starts empty on every run so
+// two runs of this program produce exactly the same bytes.
 
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { cpSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-const repoRoot = dirname(fileURLToPath(import.meta.url));
+const root = fileURLToPath(new URL('.', import.meta.url));
 const outDir = process.env.MAKEFUN_OUTPUT_DIR || '/output';
 
-// Start from a clean slate so two runs over the same output directory write
-// the same bytes.
-for (const name of ['app', 'screenshots']) {
-  rmSync(join(outDir, name), { recursive: true, force: true });
-}
+rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
-cpSync(join(repoRoot, 'app'), join(outDir, 'app'), { recursive: true });
-cpSync(join(repoRoot, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
+cpSync(join(root, 'app'), join(outDir, 'app'), { recursive: true });
+cpSync(join(root, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
 
 const dossier = buildDossier(outDir, {
   text_max_bytes: 163840,
@@ -33,4 +26,7 @@ const dossier = buildDossier(outDir, {
 });
 writeFileSync(join(outDir, 'dossier.json'), dossier);
 
-console.log(`VICEFRAME hand-in complete: app/ + screenshots/ copied, dossier.json ${dossier.length} bytes.`);
+// One compact log line per hand-in: shot count and dossier size, so a CI
+// log alone shows what was handed in without opening the output folder.
+const shotCount = readdirSync(join(outDir, 'screenshots')).length;
+console.log(`viceframe hand-in: ${shotCount} screenshots, dossier ${Buffer.byteLength(dossier)} bytes -> ${outDir}`);

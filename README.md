@@ -1,109 +1,74 @@
+# VICEFRAME — multi-panel action-game cover studio for your own photos
+
 [![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 [![rank](https://make.fun/badge/gta6-cover-art-01/Kivye/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 [![reward](https://make.fun/badge/gta6-cover-art-01/Kivye/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
-# VICEFRAME — a GTA-style cover maker from your photos
+VICEFRAME is a one-screen, fully offline cover maker. Drop in your own
+photos and it seats them in a slanted comic-panel grid, runs every panel
+through one shared colour grade so the collage reads as a single poster,
+sets a stacked display title with a neon script accent over the art, and
+exports a print-safe PNG. No uploads, no accounts, no network: the whole
+studio is static files and a canvas.
 
-VICEFRAME turns a handful of photos into box art in the grand-theft
-tradition: a tilted-panel collage, one unifying illustrated grade, a heavy
-stacked caption, a neon script accent, and the little pieces of furniture a
-game box wears — a platform header bar, a rating block with its descriptor
-card, a studio badge, a sheen sweep, and one car nose that refuses to stay
-inside its panel.
+## What it does
 
-Everything runs in the browser, offline. There are no uploads and no
-network calls: your photos are read into the page and painted onto a canvas,
-and the bundled sample photos and fonts ship inside `app/`.
+- **Three panel layouts** — Classic 5-Panel, Widescreen Split and Slashed
+  Comic — drawn as tilted quadrilaterals with real gutters, never plain
+  rectangles. One photo can fill several panels; several photos deal out
+  round-robin.
+- **Panel framing that feels like a darkroom** — click a panel, drag it on
+  the canvas to pan, scroll to zoom (45–400%), flip it, or reset it; the
+  same controls live in the rail as sliders.
+- **Five colour grades, one light** — Illustrated (poster + ink), Vice
+  Sunset tritone, Neon Noir (with an optional deep-night pass), Golden
+  Print and a dark Midnight grade, plus a Comic Ink halftone toggle. The
+  grade is computed once per photo and shared by every panel.
+- **Poster furniture, all toggleable** — platform header bar, five-star
+  press strip with an editable review quote, per-panel callout chips
+  (THE DRIVER, THE RIDER, THE GETAWAY, THE CITY, THE COURIER), a gold
+  VICEFRAME ORIGINAL seal, rating block with descriptor card, collector
+  barcode, studio badge and a neon keyline frame.
+- **Live lettering** — title (up to three lines, auto-shrinking
+  Archivo Black with a hard shadow and neon glow), script accent,
+  tagline strip and credits line, all editable in the rail and rendered
+  on the canvas as you type.
+- **Two built-in scenes** — Vice Heat and Midnight Run — plus Randomize
+  Vibe (button or the R key) and a 30-step undo (button or Ctrl/Cmd+Z).
+- **Export in the three post sizes** — Square 1080×1080, Portrait
+  1080×1350, Landscape 1920×1080 — rendered offscreen at full resolution,
+  plus a 3D collector case PNG of the current scene.
 
-## What you can do with it
+## Run it
 
-- **Three collage layouts.** *Hero* — one tall panel on the left and a
-  column of scenes on the right, like the reference cover. *Duo* — two big
-  panels. *Classic Nine* — a 3×3 grid. Panels are slightly tilted
-  quadrilaterals with pale keylines, not plain rectangles.
-- **Your photos, or ours.** Nine illustrated samples are bundled. Add your
-  own with the upload button or by dragging image files onto the window,
-  then click a photo to drop it into the selected panel, assign photos per
-  panel from the Panels list, drag a panel to reposition its photo, and
-  scroll (or use the +/− buttons) to zoom.
-- **Four colour grades.** *Illustrated* (the default) posterizes each photo
-  and darkens its ink edges so a phone snapshot sits comfortably next to
-  painted art. *Vice Sunset* maps everything through a magenta-to-gold
-  tritone. *Neon Nights* pushes saturation with cool shadows and warm
-  highlights. *Golden Hour* warms the whole collage like late sun.
-- **Canvas dressing.** Behind the panels the renderer paints a retro sun
-  disc with slit cuts, palm silhouettes, a skyline silhouette and a halftone
-  dot screen, so even the gaps between panels look printed.
-- **Lettering.** A two-line title in Archivo Black with a thick dark stroke
-  and a hard offset shadow, and a Yellowtail script accent in neon pink that
-  starts under the tail of the last title line. The script is painted twice —
-  a dark shadow pass first, then the glow — so it stays readable over bright
-  art and clear of the rating block. Both texts are editable in the rail.
-- **Box furniture, toggleable.** Platform header bar, rating block with a
-  two-line descriptor card, studio badge, sheen sweep, and the
-  frame-breaking car nose.
-- **Exports that match the box.** One-click PNG downloads at square
-  1080×1080, portrait 1080×1350 and landscape 1920×1080, plus an export
-  sheet that renders the same scene at all three sizes side by side (and
-  can itself be downloaded as a PNG).
-
-## Running it
-
-The app is static. Serve the `app/` folder with anything, for example the
-bundled dev server (Node's standard library only):
-
-```
+```sh
 node serve.ts        # then open http://localhost:8080
 ```
 
-Opening `app/index.html` straight from disk works too.
+Any static file server pointed at `app/` works just as well; there is no
+build step and nothing to install.
 
-The page also has a deterministic screenshot mode: give the URL a `?shot=`
-query (kind, photo list, layout, size, preset, per-panel assignment and
-crops, title and script) and the app renders that exact scene and raises
-`window.__shotReady` when it is painted. `shots.json` at the repository
-root lists the four captures in `screenshots/`.
+## How it is built
 
-## What's new in this build
+- `app/index.html` — the studio shell and editor rail.
+- `app/style.css` — the dark editor chrome.
+- `app/src/cover.js` — the whole render pipeline: panel geometry, the
+  shared grade, halftone, furniture, lettering, the cover renderer and
+  the export sheet. Deterministic: no clock or random source in the
+  render path, so the same state always paints the same bytes.
+- `app/src/main.js` — editor wiring: tray, gestures, caption fields,
+  undo history, scenes and PNG export.
+- `main.ts` — the hand-in program; copies `app/` + `screenshots/` to the
+  output directory and writes `dossier.json` with the kit library.
+- `serve.ts` — the small dev server above.
 
-- **A painted hero panel.** The tall left panel now uses a fully painted
-  heroine illustration — dark wavy hair, sunglasses, gold hoops, an open
-  white linen shirt over a black top — leaning on a red vintage convertible
-  on a beach boulevard at sunset, with a patrol helicopter and its
-  searchlight painted into the sky above her. Because the helicopter lives
-  in the artwork itself, the cover no longer needs a drawn overlay there.
-- **A night-city panel.** The skyline slot is now a painted night scene:
-  Art Deco towers under a full moon, pink-and-cyan neon, palm silhouettes, a
-  coastal overpass, and red-blue reflections smeared across wet asphalt.
-- **The script moved in with the title.** "after dark" now starts right
-  under the last two letters of HEAT with its own dark shadow pass, clear of
-  the rating furniture, exactly where a box designer would tuck it.
+## Assets and licences
 
-## Fonts and licences
+The sample photos under `app/samples/` were made with an image model for
+this entry (plus two starter photos from the competition kit) and are
+free to use. All fonts under `app/fonts/` are SIL Open Font License 1.1
+faces — Archivo, Archivo Black, Bebas Neue, Oswald, Yellowtail and
+Anton — each shipped with its own licence file. VICEFRAME is an original
+work: no Rockstar Games logo, artwork or font is used anywhere.
 
-All fonts are bundled locally under `app/fonts/` and are open-licensed
-(SIL Open Font License 1.1; the licence text for each family ships beside
-its font file):
-
-- **Archivo Black** — the title face.
-- **Yellowtail** — the script accent.
-- **Anton** and **Oswald** — rating block, header and badge lettering.
-- **Archivo** and **Bebas Neue** — interface and supporting text.
-
-The sample photos in `app/samples/` were made with an image model for this
-entry. VICEFRAME is an original work; it is not affiliated with Rockstar
-Games or the Grand Theft Auto series.
-
-## Hand-in
-
-`main.ts` is the submission program: it copies `app/` and `screenshots/`
-into the output directory (`MAKEFUN_OUTPUT_DIR`, default `/output`) and
-writes `dossier.json` there with the kit's vendored `buildDossier`.
-
-```
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-```
-
-## Licence
-
-MIT — see `LICENSE`.
+The entry itself is MIT licensed — see `LICENSE`.

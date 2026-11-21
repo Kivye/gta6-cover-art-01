@@ -1,80 +1,112 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VICEFRAME — GTA-style cover maker</title>
+<title>VICEFRAME — cover maker from your own photos</title>
+<meta name="description" content="VICEFRAME turns your photos into multi-panel action-game cover art: three layouts, five colour grades, live pan/zoom/flip framing and PNG export in three post sizes. Fully offline.">
 <link rel="stylesheet" href="style.css">
+<style>
+  html, body { margin: 0; padding: 0; background: #0B0B10; }
+  body.shotmode { background: #050508; }
+  #shotCanvas { display: block; }
+</style>
 </head>
 <body>
 <div id="app">
   <aside id="rail">
-    <header class="brand">
-      <h1>VICEFRAME</h1>
-      <p>Turn your photos into GTA-style box art. Pick a layout, drop photos
-      into the panels, set the caption, export a poster PNG.</p>
-    </header>
+    <div id="wordmark">VICEFRAME</div>
+    <button id="randomBtn" class="wideBtn">Randomize vibe</button>
 
-    <section>
-      <h2>Photos</h2>
-      <div id="photoTray" class="tray"></div>
-      <button id="uploadBtn" class="wide">Upload your own photo</button>
-      <p class="hint">…or drag image files anywhere onto this window. Photos
-      never leave your machine. Click a photo to drop it into the selected panel.</p>
-    </section>
+    <h2>Photos</h2>
+    <div id="tray"></div>
+    <button id="uploadBtn" class="wideBtn">Upload your own photo</button>
+    <button id="sampleBtn" class="wideBtn ghost">Try a sample</button>
+    <div class="chipRow" id="sceneRow">
+      <button class="chip active" data-scene="viceheat">Vice Heat</button>
+      <button class="chip" data-scene="midnight">Midnight Run</button>
+    </div>
 
-    <section>
-      <h2>Panels</h2>
-      <div id="panelList"></div>
-      <p class="hint">Drag a panel on the cover to reposition its photo;
-      scroll over a panel to zoom it.</p>
-    </section>
+    <h2>Panel Framing
+      <span class="hBtns">
+        <button id="flipBtn" class="miniBtn">Flip</button>
+        <button id="resetBtn" class="miniBtn">Reset</button>
+      </span>
+    </h2>
+    <p class="frameLine">Framing: <b id="frameName">Hero</b></p>
+    <label class="sliderRow">Pan X <input type="range" id="panX" min="-85" max="85" value="0"><span id="panXVal">0%</span></label>
+    <label class="sliderRow">Pan Y <input type="range" id="panY" min="-85" max="85" value="0"><span id="panYVal">0%</span></label>
+    <label class="sliderRow">Zoom <input type="range" id="zoom" min="45" max="400" value="100"><span id="zoomVal">100%</span></label>
+    <p class="hint">Drag a panel to pan it · scroll to zoom · double-click the cover for the title.</p>
 
-    <section>
-      <h2>Layout</h2>
-      <div id="layoutBtns" class="choices"></div>
-      <h2>Post size</h2>
-      <div id="sizeBtns" class="choices"></div>
-    </section>
+    <h2>Panel Layout
+      <span class="hBtns"><button id="shuffleBtn" class="miniBtn" title="Shuffle layout">Shuffle</button></span>
+    </h2>
+    <div class="chipRow">
+      <button class="chip active" data-layout="hero">Classic 5-Panel</button>
+      <button class="chip" data-layout="split">Widescreen Split</button>
+      <button class="chip" data-layout="slashed">Slashed Comic</button>
+    </div>
 
-    <section>
-      <h2>Colour grade</h2>
-      <div id="gradeBtns" class="choices"></div>
-    </section>
+    <h2>Colour Grade</h2>
+    <div class="chipRow">
+      <button class="chip active" data-preset="illustrated">Illustrated (poster + ink)</button>
+      <button class="chip" data-preset="sunset">Vice Sunset tritone</button>
+      <button class="chip" data-preset="neon">Neon Noir</button>
+      <button class="chip" data-preset="golden">Golden Print</button>
+    </div>
+    <label class="checkRow"><input type="checkbox" id="comicChk"> Comic ink — posterise, ink lines + halftone</label>
 
-    <section>
-      <h2>Caption</h2>
-      <label class="field">Title (one line per row)
-        <textarea id="titleInput" rows="2" spellcheck="false"></textarea>
-      </label>
-      <label class="field">Script accent
-        <input id="scriptInput" type="text" spellcheck="false">
-      </label>
-    </section>
+    <h2>Print Finish</h2>
+    <div class="chipRow">
+      <button class="chip active" data-finish="clean">Clean Digital</button>
+      <button class="chip" data-finish="glossy">Glossy Magazine</button>
+      <button class="chip" data-finish="worn">Worn Collector Box</button>
+    </div>
 
-    <section>
-      <h2>Box furniture</h2>
-      <div id="furnitureToggles"></div>
-    </section>
+    <h2>Caption</h2>
+    <label class="field">Title (one line per row)
+      <textarea id="capTitle" rows="2">VICE
+HEAT</textarea>
+    </label>
+    <label class="field">Script accent
+      <input id="capScript" type="text" value="after dark">
+    </label>
+    <label class="field">Tagline strip
+      <input id="capTagline" type="text" value="TWO HEARTS · ONE GETAWAY · NO WAY BACK">
+    </label>
+    <label class="field">Review quote
+      <input id="capQuote" type="text" value="VICE NEVER LOOKED THIS GOOD">
+    </label>
+    <label class="field">Review source
+      <input id="capSource" type="text" value="THE PALMS GAZETTE">
+    </label>
 
-    <section>
-      <h2>Export</h2>
-      <div class="exportGrid">
-        <button id="exportSquare">PNG · Square</button>
-        <button id="exportPortrait">PNG · Portrait</button>
-        <button id="exportLandscape">PNG · Landscape</button>
-      </div>
-      <button id="sheetBtn" class="wide">Export sheet — all three sizes</button>
-      <button id="exportSheetPng" class="wide ghost">Download the sheet as PNG</button>
-    </section>
+    <h2>Export</h2>
+    <div class="chipRow" id="sizeRow">
+      <button class="chip" data-size="square">Square</button>
+      <button class="chip" data-size="portrait">Portrait</button>
+      <button class="chip active" data-size="landscape">Landscape</button>
+    </div>
+    <button id="exportBtn">EXPORT PNG</button>
+    <button id="caseBtn" class="wideBtn ghost">Download 3D case PNG</button>
+    <p class="hint">Everything runs on this machine. Your photos never leave the browser.</p>
   </aside>
 
-  <main id="stageWrap">
-    <canvas id="stage" width="1920" height="1080"></canvas>
-    <canvas id="sheet" width="1800" height="1200" hidden></canvas>
+  <main id="stage">
+    <div id="statusBar">
+      <span id="statusDot"></span>
+      <span id="statusText">CANVAS READY • 300 DPI PRINT-SAFE • 5 PANELS • LANDSCAPE 1920 × 1080</span>
+      <button id="undoBtn">Undo</button>
+    </div>
+    <div id="canvasWrap">
+      <canvas id="coverCanvas" width="1920" height="1080"></canvas>
+    </div>
   </main>
 </div>
-<input id="fileInput" type="file" accept="image/*" multiple hidden>
-<script type="module" src="./src/main.js"></script>
+
+<canvas id="shotCanvas" hidden></canvas>
+<input type="file" id="filePick" accept="image/*" multiple hidden>
+<script type="module" src="src/main.js"></script>
 </body>
 </html>
